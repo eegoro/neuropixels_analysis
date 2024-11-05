@@ -1,0 +1,1 @@
+RECORDING_FILE = "/path/to/your/recording.bin"
