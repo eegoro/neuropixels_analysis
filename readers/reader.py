@@ -74,7 +74,7 @@ class NeuropixelsReader:
             with open(meta_path, 'r') as file:
                 for line in file:
                     if '=' in line:
-                        key, value = line.strip().split('=')
+                        key, value = line.strip().split('=', 1)
                         metadata[key.lstrip('~')] = value
         except IOError as e:
             raise IOError(f"Could not read metadata file: {meta_path}") from e
@@ -180,16 +180,19 @@ class NeuropixelsReader:
                     if chan not in self.channel_map:
                         continue
                         
-                    phys_chan = self.channel_map[chan]
-                    data = chunk[:, phys_chan]
+                    chan_idx = self.channel_map[chan]
+                    data = chunk[:, chan_idx]
                     
                     if convert_to_uv:
                         # Apply appropriate gain
-                        if phys_chan < self.n_ap_channels:
-                            gain = self.ap_gains[phys_chan]
+                        if chan < 384:
+                            gain = self.ap_gains[chan_idx]
                         else:
-                            gain = self.lf_gains[phys_chan - self.n_ap_channels]
-                            
+                            if chan < 768:
+                                gain = self.lf_gains[chan_idx]
+                            else:
+                                continue
+                                     
                         # Convert to microvolts
                         scale = (self.voltage_range / self.max_int / gain) * 1e6
                         data = data.astype(np.float32) * scale
