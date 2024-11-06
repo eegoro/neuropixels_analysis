@@ -122,8 +122,8 @@ class NeuropixelsReader:
                 channels.extend(range(start, end + 1))
             else:
                 channels.append(int(part))
-                
-        return {chan: idx for idx, chan in enumerate(sorted(channels))}
+        types = ['ap'] * self.n_ap_channels + ['lf'] * self.n_lf_channels + ['sync'] * self.n_sync_channels
+        return {chan: [idx, t] for idx, (chan, t) in enumerate(zip(channels, types))}
 
     def read_data(
         self, 
@@ -180,15 +180,16 @@ class NeuropixelsReader:
                     if chan not in self.channel_map:
                         continue
                         
-                    chan_idx = self.channel_map[chan]
+                    chan_idx = self.channel_map[chan][0]
+                    type_chan = self.channel_map[chan][1]
                     data = chunk[:, chan_idx]
                     
                     if convert_to_uv:
                         # Apply appropriate gain
-                        if chan < 384:
+                        if type_chan == 'ap':
                             gain = self.ap_gains[chan_idx]
                         else:
-                            if chan < 768:
+                            if type_chan == 'lf':
                                 gain = self.lf_gains[chan_idx]
                             else:
                                 continue
