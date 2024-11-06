@@ -2,7 +2,7 @@
 Utilities for reading Neuropixels neural recording data
 
 This module provides tools for reading and processing data from Neuropixels probes.
-Supports Neuropixels 2.0 and others variants.
+Supports Neuropixels 1.0 and 2.0.
 
 """
 
@@ -87,7 +87,7 @@ class NeuropixelsReader:
         if self.probe_type in [21, 24]:
             return [80.0] * self.n_ap_channels, [80.0] * self.n_lf_channels
             
-        # For Neuropixels 3A/B
+        # For Neuropixels 1.0 (3A/B)
         imro_table = self.metadata.get('imroTbl', '')
         if not imro_table:
             return [], []
@@ -110,10 +110,15 @@ class NeuropixelsReader:
     
     def _create_channel_map(self) -> Dict[int, int]:
         """Create mapping between logical and physical channel indices."""
-        channel_subset = self.metadata.get('snsSaveChanSubset', 'all')
         
+        channel_subset = self.metadata.get('snsSaveChanSubset', 'all')
+        types = ['ap'] * self.n_ap_channels \
+                + ['lf'] * self.n_lf_channels \
+                + ['sync'] * self.n_sync_channels \
+                + ['undefined'] * (self.n_total_channels - self.n_ap_channels - self.n_lf_channels - self.n_sync_channels)
+
         if channel_subset == 'all':
-            return {i: i for i in range(self.n_total_channels)}
+            return {idx: [idx,t] for idx,t in enumerate(types)}
             
         channels = []
         for part in channel_subset.split(','):
@@ -122,7 +127,7 @@ class NeuropixelsReader:
                 channels.extend(range(start, end + 1))
             else:
                 channels.append(int(part))
-        types = ['ap'] * self.n_ap_channels + ['lf'] * self.n_lf_channels + ['sync'] * self.n_sync_channels
+        
         return {chan: [idx, t] for idx, (chan, t) in enumerate(zip(channels, types))}
 
     def read_data(
