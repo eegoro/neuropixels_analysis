@@ -182,10 +182,12 @@ class NeuropixelsReader:
                 
                 # Process each channel
                 for j, chan in enumerate(channels):
-                    if chan not in self.channel_map:
-                        continue
+                    try:
+                        chan_idx = self.channel_map[chan][0]
+                    except KeyError:
+                        raise KeyError(f"Channel {chan} doesn't exist. Available channels are: {list(self.channel_map.keys())}") from None
                         
-                    chan_idx = self.channel_map[chan][0]
+                    
                     type_chan = self.channel_map[chan][1]
                     data = chunk[:, chan_idx]
                     
