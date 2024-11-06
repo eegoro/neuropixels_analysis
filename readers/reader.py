@@ -193,16 +193,13 @@ class NeuropixelsReader:
                     
                     if convert_to_uv:
                         # Apply appropriate gain
-                        if type_chan == 'ap':
-                            gain = self.ap_gains[chan_idx]
+
+                        if type_chan in ['ap', 'lf']:
+                            gain = self.ap_gains[chan_idx] if type_chan == 'ap' else self.lf_gains[chan_idx]
+                            scale = (self.voltage_range / self.max_int / gain) * 1e6 
                         else:
-                            if type_chan == 'lf':
-                                gain = self.lf_gains[chan_idx]
-                            else:
-                                continue
+                            scale = 1
                                      
-                        # Convert to microvolts
-                        scale = (self.voltage_range / self.max_int / gain) * 1e6
                         data = data.astype(np.float32) * scale
                         
                     result[i, j, :len(data)] = data
