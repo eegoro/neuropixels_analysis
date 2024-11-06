@@ -1,1 +1,3 @@
-RECORDING_FILE = "/path/to/your/recording.bin"
+RECORDING_FILE = "W:\Large_scale_mapping_NP\Awake_exp\SA6\SA6_experiment_4_9_23\Insertion4\SA6_experiment_4_9_23_4_g0\SA6_experiment_4_9_23_4_g0_imec0\SA6_experiment_4_9_23_4_g0_t0.imec0.ap.bin"
+RECORDING_FILE_1 = "W:\Large_scale_mapping_NP\Awake_exp\SA6\SA6_experiment_4_9_23\Insertion4\catgt_SA6_experiment_4_9_23_4_g0\SA6_experiment_4_9_23_4_g0_tcat.imec0.ap.bin"
+RECORDING_FILE_LF = "W:\Large_scale_mapping_NP\Awake_exp\SA6\SA6_experiment_4_9_23\Insertion4\catgt_SA6_experiment_4_9_23_4_g0\SA6_experiment_4_9_23_4_g0_tcat.imec0.lf.bin"
