@@ -35,14 +35,24 @@ class NeuropixelsReader:
         self.metadata = self._read_metadata()
 
         self.is_imec = self.metadata.get('typeThis', '') == 'imec'
+        self.is_nidq = self.metadata.get('typeThis', '') == 'nidq'
         self.sampling_rate = float(self.metadata.get(
             'imSampRate' if self.is_imec else 'niSampRate', 0))
         
         # Get channel counts
-        counts = list(map(int, self.metadata.get('snsApLfSy', '0,0,0').split(',')))
-        self.n_ap_channels = counts[0]
-        self.n_lf_channels = counts[1]
-        self.n_sync_channels = counts[2]
+        if self.is_imec:
+            counts = list(map(int, self.metadata.get('snsApLfSy', '0,0,0').split(',')))
+            self.n_ap_channels = counts[0]
+            self.n_lf_channels = counts[1]
+            self.n_sync_channels = counts[2]
+        
+        if self.is_nidq:
+            counts = list(map(int, self.metadata.get('snsMnMaXaDw', '0,0,0,0').split(',')))
+            self.n_mn_channels = counts[0]
+            self.n_ma_channels = counts[1]
+            self.n_xa_channels = counts[2]
+            self.n_dw_channels = counts[3]
+
         self.n_total_channels = int(self.metadata.get('nSavedChans', 0))
 
         # Set voltage conversion parameters
@@ -52,7 +62,13 @@ class NeuropixelsReader:
         
         # Set gains based on probe type
         self.probe_type = int(self.metadata.get('imDatPrb_type', 0))
-        self.ap_gains, self.lf_gains = self._get_channel_gains()
+        if self.is_imec:
+            self.ap_gains, self.lf_gains = self._get_channel_gains()
+
+        if self.is_nidq:
+            self.nidq_gains = np.ones(self.n_total_channels)
+            self.nidq_gains[self.n_mn_channels] = int(self.metadata.get('niMNGain', 1))
+            self.nidq_gains[self.n_mn_channels:(self.n_mn_channels + self.n_ma_channels)] = int(self.metadata.get('niMAGain', 1))
 
         # Create channel mapping
         self.channel_map = self._create_channel_map()
@@ -83,8 +99,10 @@ class NeuropixelsReader:
     
     def _get_channel_gains(self) -> Tuple[List[float], List[float]]:
         """Get gain values for AP and LF channels."""
-        # For Neuropixels 2.0 (probe types 21, 24)
-        if self.probe_type in [21, 24]:
+        # For Neuropixels 2.0 probe types:
+        #       1-shank: 21,2003,2004
+        #       4-shank: 24,2013,2014
+        if self.probe_type in [21, 24, 2003, 2004, 2013, 2014]:
             return [80.0] * self.n_ap_channels, [80.0] * self.n_lf_channels
             
         # For Neuropixels 1.0 (3A/B)
@@ -112,10 +130,19 @@ class NeuropixelsReader:
         """Create mapping between logical and physical channel indices."""
         
         channel_subset = self.metadata.get('snsSaveChanSubset', 'all')
-        types = ['ap'] * self.n_ap_channels \
-                + ['lf'] * self.n_lf_channels \
-                + ['sync'] * self.n_sync_channels \
-                + ['undefined'] * (self.n_total_channels - self.n_ap_channels - self.n_lf_channels - self.n_sync_channels)
+        if self.is_imec:
+            types = ['ap'] * self.n_ap_channels \
+                    + ['lf'] * self.n_lf_channels \
+                    + ['sync'] * self.n_sync_channels \
+                    + ['undefined'] * (self.n_total_channels - self.n_ap_channels - self.n_lf_channels - self.n_sync_channels)
+        elif self.is_nidq:
+            types = ['mn']*self.n_mn_channels \
+            + ['ma'] * self.n_ma_channels \
+            + ['xa'] * self.n_xa_channels \
+            + ['dw'] * self.n_dw_channels \
+            + ['undefined'] * (self.n_total_channels - self.n_mn_channels - self.n_ma_channels - self.n_xa_channels - self.n_dw_channels)
+        else:
+            types = ['undefined'] * self.n_total_channels   
 
         if channel_subset == 'all':
             return {idx: [idx,t] for idx,t in enumerate(types)}
@@ -129,6 +156,13 @@ class NeuropixelsReader:
                 channels.append(int(part))
         
         return {chan: [idx, t] for idx, (chan, t) in enumerate(zip(channels, types))}
+    
+    def _int16_to_bits(self, data):
+        data = data.astype(np.int16)
+        bits = np.zeros((len(data), 16), dtype=np.bool)
+        for i in range(16):
+            bits[:, i] = (data >> i) & 1
+        return bits
 
     def read_data(
         self, 
@@ -158,16 +192,17 @@ class NeuropixelsReader:
         total_samples = file_size // (2 * self.n_total_channels)  # int16 = 2 bytes
         
         # Prepare output arrays
-        result = np.zeros(
-            (len(start_times_ms), len(channels), samples_per_window),
-            dtype=np.float32 if convert_to_uv else np.int16
-        )
-        time_array = np.zeros((len(start_times_ms), samples_per_window))
+        # result = np.zeros(
+        #     (len(start_times_ms), len(channels), samples_per_window),
+        #     dtype=np.float32 if convert_to_uv else np.int16
+        # )
+        result = {}
         
         # Read data
         with open(self.file_path, 'rb') as f:
-            for i, start_ms in enumerate(start_times_ms):
+            for start_ms in start_times_ms:
                 # Get sample position
+                result[start_ms] = {}
                 start_sample = int(start_ms * self.sampling_rate / 1000)
                 if start_sample < 0 or start_sample >= total_samples:
                     continue
@@ -181,13 +216,13 @@ class NeuropixelsReader:
                 ).reshape(-1, self.n_total_channels)
                 
                 # Process each channel
-                for j, chan in enumerate(channels):
+                for chan in channels:
                     try:
                         chan_idx = self.channel_map[chan][0]
                     except KeyError:
                         raise KeyError(f"Channel {chan} doesn't exist. Available channels are: {list(self.channel_map.keys())}") from None
                         
-                    
+                    result[start_ms][chan] = {}
                     type_chan = self.channel_map[chan][1]
                     data = chunk[:, chan_idx]
                     
@@ -197,27 +232,36 @@ class NeuropixelsReader:
                         if type_chan in ['ap', 'lf']:
                             gain = self.ap_gains[chan_idx] if type_chan == 'ap' else self.lf_gains[chan_idx]
                             scale = (self.voltage_range / self.max_int / gain) * 1e6 
+                        elif type_chan == 'nidq' and chan_idx!=self.n_total_channels-1:
+                            gain = self.nidq_gains[chan_idx]
+                            scale = (self.voltage_range / self.max_int / gain) * 1e6 
                         else:
                             scale = 1
-                                     
-                        data = data.astype(np.float32) * scale
-                        
-                    result[i, j, :len(data)] = data
+
+                        if chan_idx!=self.n_total_channels-1:             
+                            data = data.astype(np.float32) * scale
+
+                    if self.is_nidq and chan_idx==self.n_total_channels-1:
+                        data_bits = self._int16_to_bits(data) # n samples X 16
+                        result[start_ms][chan] = data_bits
+                    else:
+                        result[start_ms][chan] = data
 
                 # Create time array
-                time_array[i, :] = np.linspace(
+                result[start_ms]['time'] = np.linspace(
                     start_ms,
                     start_ms + (samples_per_window - 1) / self.sampling_rate * 1000,
                     num=samples_per_window
                 )
+
                 # time_array = np.arange(samples_per_window) / self.sampling_rate * 1000
         
-        return result, time_array
+        return result
 
 # Example usage
 if __name__ == "__main__":
     reader = NeuropixelsReader("/path/to/your/recording.bin")
-    data, time = reader.read_data(
+    data = reader.read_data(
         channels=[0, 1, 2],
         start_times_ms=[0, 1000],
         window_ms=100
