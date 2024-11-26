@@ -203,7 +203,7 @@ class NeuropixelsReader:
             for start_ms in start_times_ms:
                 # Get sample position
                 result[start_ms] = {}
-                start_sample = int(start_ms * self.sampling_rate / 1000)
+                start_sample = round(start_ms * self.sampling_rate / 1000)
                 if start_sample < 0 or start_sample >= total_samples:
                     continue
                     
@@ -249,10 +249,10 @@ class NeuropixelsReader:
 
                 # Create time array
                 result[start_ms]['time'] = np.linspace(
-                    start_ms,
-                    start_ms + (samples_per_window - 1) / self.sampling_rate * 1000,
+                    start_sample*1000/self.sampling_rate,
+                    start_sample*1000/self.sampling_rate + (samples_per_window - 1) / self.sampling_rate * 1000,
                     num=samples_per_window
-                )
+                )[:len(result[start_ms][chan])]
 
                 # time_array = np.arange(samples_per_window) / self.sampling_rate * 1000
         
