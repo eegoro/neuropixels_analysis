@@ -60,9 +60,12 @@ class NeuralDataVisualizer:
             n_colors: Number of colors in the palette
         """
         self.set_style(style, context)
-        self.color_palette = self._generate_palette(color_scheme, n_colors)
+        self.set_color_palette(color_scheme, n_colors)
         self.plot_config = PlotConfig()
-        
+
+    def set_color_palette(self, color_scheme, n_colors):
+        self.color_palette = self._generate_palette(color_scheme, n_colors)
+
     def _generate_palette(self, scheme: str, n_colors: int) -> List:
         """Generate a color palette with improved contrast."""
         if scheme == 'rainbow':
