@@ -19,6 +19,8 @@ import numpy as np
 from typing import Dict, Optional, Tuple, List, Union
 from dataclasses import dataclass
 import colorsys
+import scipy.cluster.hierarchy as sch
+from matplotlib import gridspec
 
 @dataclass
 class PlotConfig:
@@ -244,6 +246,123 @@ class NeuralDataVisualizer:
         plt.tight_layout()
         
         return fig, ax
+    
+    def plot_sorted_correlation_matrix(self, correlation_matrix, linkage_matrix):
+        fig = plt.figure(figsize=(5, 2), dpi=150) 
+        gs = gridspec.GridSpec(1, 2, width_ratios=[1, 8]) 
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1])
+
+        sch.set_link_color_palette(['orange', 'lightblue'])
+        with plt.rc_context({'lines.linewidth': 0.7}):
+            dendrogram = sch.dendrogram(linkage_matrix, ax=ax0, no_labels=True, orientation='left', above_threshold_color='grey')
+
+        ax0.tick_params(axis='x', which='major', labelsize=6)
+        ax0.grid(False)
+        ax0.set_xlabel('Distance', fontsize=10)
+        ax0.spines['left'].set_edgecolor("white")
+
+        sorted_indices = list(map(int, dendrogram['ivl'][::-1])) 
+        sorted_correlation_matrix = correlation_matrix[sorted_indices][:, sorted_indices]
+
+        sns.heatmap(sorted_correlation_matrix, cmap='viridis',  cbar_kws={"shrink": 0.5, 'label': 'correlation'}, vmin=-1, vmax=1, ax=ax1)
+    
+        ax1.tick_params(axis='x', which='major', labelsize=8)
+        ax1.tick_params(axis='y', which='major', labelsize=8)
+
+        plt.title('Sorted Correlation Matrix')
+        ax1.set_xlabel('Sample Index', fontsize=10)
+
+        plt.grid(False)
+        plt.show()
+
+        return fig, ax0, ax1
+    
+    def plot_transition_frequency(self, x, y1, y2, intersection_point):
+        fig = plt.figure(figsize=(5, 2))
+        plt.plot(x, y1, label='Cluster 1', color='blue')
+        plt.plot(x, y2, label='Cluster 2', color='red')
+        plt.xlabel('Frequency', fontsize=10)
+        plt.ylabel('Power', fontsize=10)
+        plt.title('Average Normalized PSD for Clusters') 
+        plt.legend(fontsize=10)
+        plt.tick_params(axis='x', which='major', labelsize=8)
+        plt.tick_params(axis='y', which='major', labelsize=8)
+        plt.grid(True)
+
+        plt.xlim(0, 35)
+
+        for (x_inter,y_iter) in intersection_point:
+            plt.axvline(x=x_inter, color='green', linestyle='--')
+            plt.text(x_inter + 0.5, y_iter + 0.1, f'{x_inter:.2f}', fontsize=8) 
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+
+        plt.show()
+
+        return fig
+    
+    def plot_delta_beta_matrix(self, data, num_bins_x = 6):
+        num_y = len(data) // num_bins_x
+        delta_beta_matrix = data[:num_bins_x*num_y].reshape((num_y, num_bins_x))
+
+        fig = plt.figure(figsize=(5, 2))
+        plt.imshow(delta_beta_matrix, aspect='auto', cmap='viridis', interpolation='nearest')
+        plt.colorbar(label='Delta/Beta Power Ratio')
+        plt.title('Delta/Beta Power Ratio for 30-Minute Intervals', fontsize=14)
+        # plt.xlabel('Time [Minutes]', fontsize=16)
+        # plt.ylabel('Half-Hour count', fontsize=16)
+        # plt.xticks(tick_locations, tick_labels, fontsize=14)
+        # plt.yticks(fontsize=14)
+        plt.grid(False)
+        plt.show()
+
+        return fig
+    
+    def plot_autocorr(self, autocorr, avg_peak_index, peak_range = 300, bin_second = 10):
+        start_index = max(avg_peak_index - (peak_range // bin_second), 0) 
+        end_index = min(avg_peak_index + (peak_range // bin_second), len(autocorr))
+
+        autocorr_plot = autocorr[start_index:end_index + 1]
+        avg_autocorr_range = np.mean(autocorr_plot)
+        lags = np.arange(-len(autocorr_plot)//2 + 1, len(autocorr_plot)//2 + 1)* 10 
+
+        fig = plt.figure(figsize=(5, 2))
+        plt.plot(lags, autocorr_plot, color='red', label='Autocorrelation')
+        plt.axhline(y=avg_autocorr_range, color='black', linestyle='--', label='Average Autocorrelation')
+        plt.xlabel('Lag [s]',fontsize=14)
+        plt.ylabel('Autocorr.',fontsize=14)
+        plt.title(f'Average Autocorrelation Function within {peak_range} seconds around the peak', fontsize=14)
+        plt.legend(fontsize=14)
+        plt.grid(True)
+        plt.show()
+
+        return fig
+    
+    def plot_kde_distribution(self, x_values, y_values, avg_dist_p2p, lower_bound, upper_bound, std_dev):
+        # Plot the KDE Distribution
+        plt.figure(figsize=(5, 2))
+        plt.plot(x_values, y_values, color='skyblue', label='Sleep Time Distribution (KDE)')
+
+        # Add Average and Confidence Interval
+        plt.axvline(avg_dist_p2p, color='red', linestyle='dashed',
+                    linewidth=1, label=f'Average ({avg_dist_p2p:.2f} seconds)')
+        plt.axvspan(lower_bound, upper_bound, color='gray', alpha=0.3, label='95% Confidence Interval')
+
+        # Plot Labels and Title
+        plt.xlabel('Cycle Length [seconds]', fontsize=14)
+        plt.ylabel('Density', fontsize=14)
+        plt.title('Distribution of Sleep Cycle Times', fontsize=14)
+        plt.legend()
+        plt.grid(axis='y', alpha=0.5)  # Optional: Add gridlines for clarity
+        plt.legend(fontsize=12)
+        plt.xticks(fontsize=12)  # Larger tick labels for x-axis
+        plt.yticks(fontsize=12)
+
+        # Add Standard Deviation
+        plt.text(0.75, 0.8, f'Std. Dev. = {std_dev:.2f} seconds', transform=plt.gca().transAxes, fontsize=10)
+        plt.show()
+
 
 # Example usage
 if __name__ == "__main__":
