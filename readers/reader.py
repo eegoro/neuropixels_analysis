@@ -169,7 +169,8 @@ class NeuropixelsReader:
         channels: List[int], 
         start_times_ms: List[float], 
         window_ms: float, 
-        convert_to_uv: bool = True
+        convert_to_uv: bool = True,
+        get_all_channels = False
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Read neural data for specified channels and time windows.
@@ -197,6 +198,7 @@ class NeuropixelsReader:
         #     dtype=np.float32 if convert_to_uv else np.int16
         # )
         result = {}
+        result_all_channels = {}
         
         # Read data
         with open(self.file_path, 'rb') as f:
@@ -214,6 +216,7 @@ class NeuropixelsReader:
                     dtype=np.int16,
                     count=samples_per_window * self.n_total_channels
                 ).reshape(-1, self.n_total_channels)
+                result_all_channels[start_ms] = chunk.transpose(1,0)
                 
                 # Process each channel
                 for chan in channels:
@@ -253,9 +256,11 @@ class NeuropixelsReader:
                     start_sample*1000/self.sampling_rate + (samples_per_window - 1) / self.sampling_rate * 1000,
                     num=samples_per_window
                 )[:len(result[start_ms][chan])]
+                result_all_channels['time']  = result[start_ms]['time']
 
                 # time_array = np.arange(samples_per_window) / self.sampling_rate * 1000
-        
+        if get_all_channels:
+            return result, result_all_channels
         return result
 
 # Example usage
